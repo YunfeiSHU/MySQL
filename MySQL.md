@@ -34,7 +34,7 @@ mysql -u root -p #简写
 
   **连接池**：一个连接，**可以**连接上多个数据库；但一次**只能**连上一个数据库
 
-## 数据库结构
+## 数据库结构--表关系
 
 **MySQL数据库是关系型数据库**：数据库中的数据，**以表的形式存在**;多个表之间，**存在关系**（4种关系：1对1，多对1&1对多，多对多）
 
@@ -272,10 +272,13 @@ CREATE TABLE IF NOT EXISTS user(
 #2 修改表中列结构：
 #2.1 ADD 给 user_details 表，添加 user_ID 并设置UNIQUE
 ALTER TABLE user_details ADD user_ID int UNIQUE;
+
 #2.2 ALTER DROP 删除 user表 Name默认值的约束
 ALTER TABLE user ALTER Name DROP  DEFAULT;
+
 #2.3 ALTER ADD 给user_details创建外键约束，形成严格的一对一关系
 ALTER TABLE user_details ADD FOREIGN KEY (user_ID) REFERENCES user(ID);
+
 #2.4 修改user表的d_ID,为details_ID：
 #MySQL 不会自动更新外键约束中的列名，因此你需要手动：删除旧约束，添加新约束
 ALTER TABLE user RENAME COLUMN d_ID TO details_ID;
@@ -289,6 +292,8 @@ ALTER TABLE user DROP FOREIGN KEY user_ibfk_1; # user_ibfk_1为查询到的外�
 #添加新外键约束
 ALTER TABLE user ADD FOREIGN KEY (details_ID) REFERENCES user_details(ID);
 
+-- 认真阅读的读者，会发现，我在俩个表，分别都设计了外键彼此约束；实现：双向外键约束
+#实际在生产中，设计一个即可。详见：操作表数据部分：外键约束
 ```
 
 
@@ -343,169 +348,240 @@ mysqldump -u username -p --all-databases > /path/to/exported_file.sql
 
 
 
-## SQL语句---表数据
+## 命令：操作表数据
 
-SQL：结构化查询语句；实现对表中数据的添加、修改、删除、查询操作
+对于表中数据的操作，即对数据项的操作，分为：
 
-- 数字直接写
-- 字符串用单引号‘ '（“ ”也可，但双引号一般用于标识符；为了区分，用' '）
--  SQL语句不区分大小写
+- 添加数据项:Create
+- 更新数据项的字段值:Update
+- 删除数据项:Delete
+- 查询要求的数据项:Read
 
-### 添加--INSERT
-
-#### 插入全部字段
-
-**当插入部分字段：所有字段都有，且顺序与表结构相同——（字段...）省略**
-
-- 添加数据的顺序，要与表结构顺序一致
-
-```sql
-在db02的表插入值（表结构）
-INSERT INTO db02 VALUES(5,'小组','男');  
-```
-
-#### 插入部分字段
-
-- 数据的顺序必须和指定字段的顺序一致、
-- 部分字段，必须包括：非空字段
-
-```sql
-INSERT INTO db02(id,name) VALUES(6,'小李');
-```
-
-![image-20240723112446545](C:\Users\79042\AppData\Roaming\Typora\typora-user-images\image-20240723112446545.png)
-
-当之前的代码运行过了，需要：**选择未运行过的代码，点击运行选择的**
-
-### 修改--UPDATE+WHERE
-
-- 修改语句**必须添加where**条件，否则会修改表中的所有数据
-
-  ```mysql
-  //UPDATA 表 SET 修改字段名=值 WHERE 定位字段 ;
-  UPDATE db02 SET name='abc',age=15 WHERE id =1;
-  UPDATE db02 set age=22 WHERE name ='李四';
-  ```
-
-  
-
-### 删除--DELETE+WHERE
-
-- 删除语句必须添加where条件，否则会删除表中的所有数据
-
-```sql
-//RELETE FROM 表 WHERE 定位字段 ; 
-DELETE FROM db02 WHERE id=5;
-DELETE FROM db02 WHERE name='小丽';
-```
-
-
-
-### 查找--SELECT（+WHERE)
+### **CUD:**
 
 ```mysql
---查看表的...数据: * 所有数据,字段名 查看特定字段的所有数据
+-- 1插入 
+INSERT INTO table_name(字段名...) VALUES (值...);
+#字段名省略，则全部都需赋值
+INSERT INTO table_name VALUES(值...);
+-- 2更新
+UPDATE table_name SET 字段=新的值 WHERE ...;
+-- 3删除
+DELETE FROM 表名 WHERE ...;
+# 更新/删除，必须WHERE限定；否则默认全部数据
+```
+
+当我**插入数据时**，**需要遵守：字段的约束条件**：NOT NULL，UNIQUE，PRIMARY KEY 都很好理解
+
+但：**外键约束**，经常被人们遗忘
+
+
+
+#### 外键约束--表关系:
+
+```mysql
+# 外键约束
+FOREIGN KEY 表1.外键字段 REFERENCES 表2(指定字段);
+# 这意味着，表1.外键字段 要与 表2.指定字段 绑定；也就是表1插入数据时，表2.指定字段 一定有符合 表1.外键字段的值
+```
+
+**子表：**有外键字段及外键约束的表，称之为子表
+
+**父表：**子表外键字段，对应的表，称之为父表
+
+**对于外键字段，插入数据**：**先插入父表，才能插入子表;且子表中外键字段的值，父表必须有。**
+
+**这样的约束：先有父、才有子，就是外键约束**
+
+*此时，回看表关系部分，相信大家，已经有了不同的理解。*
+
+
+
+#### 双向外键约束机制：
+
+聪明的学习者，已经发现：如果俩个表，都有外键彼此约束时：**插入/删除，逻辑会出现问题。**
+
+经过实际测试：**插入数据，按最后执行的外键约束的顺序，进行插入；删除/更新，无法正常进行**
+
+故生产中，实现一对一关系，只需设计一个外键即可。
+
+
+
+
+
+### **R:**
+
+#### 无要求：所有数据项
+
+```mysql
+# 查看表中所有数据
 SELECT * FROM 表名;
---查看特定条件（栏目）的数据
-SELECT * FROM 表名 WHERE 定位字段;
+# 查看规定列的数据：形成一个匿名表
+SELECT 字段... FROM 表名;
 ```
 
-### WHERE常用语句
+#### 有要求：部分数据项
 
-`WHERE AND OR  IN  BETWEEN-ADN   LIKE  REGEXP`
-
-```mysql
---1 WHERE AND OR
--- 查找id=1，栏目中所有的数据
-SELECT * FROM 表名 WHERE ID=1;
--- 查找 1<id<5 栏目 中所有的数据
-SELECT * FROM 表名 WHERE id > 1 AND id < 5;
--- 查找 id = 1，5
-SELECT * FROM 表名 WHERE id = 1 OR id = 5;
-
---2 IN
---查找 id=1,5的栏目
-SELECT * FROM 表名 WHERE ID IN (1,5);
-
---3 NOT 取反
-SELECT * FROM 表名 WHERE ID NOT IN (1,5);
-
---4 BETWEEN AND
---查找[1,5]的栏目
-SELECT * FROM 表名 WHERE ID BETWEEN 1 AND 5;
-
--- LIKE $任意个字符 _任意一个字符  "王$“姓王 "$王$"名字带王
-SELECT * FROM 表名 WHERE 字段 LIKE “王$”;
-
---5 REGEXP 
--- 正则表达式  ^开头  $结尾   [abc]abc任意一个字符 [a-z]a-z任意一个字符  A|B A或者B
--- 查询姓王的所有栏目
-SELECT * FROM 表名 WHERE 字段 REGEXP "^王$"; 
--- 查询名字里带王的数据
-SELECT * FROM 表名 WHERE 字段 REGEXP "王";
-
---6 指定字段查询后，升序排列(降序)
---根据字段 默认升序排列ASC
-SELECT * FROM 表名 ORDER BY 字段;
---根据字段 降序排列DESC
-SELECT * FROM 表名 ORDER BY 字段 DESC;
-
---
-
-```
-
-#### 易错坑 null
-
-`null`与所有值不相等，包括`null` 本身 ；
-
-`null 不等于 空`
-
-通过`IS NULL` 判断是不是NULL
+精确查询：
 
 ```mysql
--- 查询值为NULL 的数据
+-- 精确查询
+# WHERE -- AND IN BETWEEN NOT 
+# AND
+SELECT * FROM 表名 WHERE id>0 AND id <5;
+# AND 限定：一定范围的线集，可用BETWEEN AND替代
+SELECT * FROM 表名 WHERE ID BETWEEN 1 AND 4;
+
+# OR
+SELECT * FROM 表名 WHERE id=1 OR id=2;
+# OR 限定：取规定值的点集时，可用IN替代
+SELECT * FROM 表名 WHERE id IN(1,2);
+
+# NOT 
+SELECT * FROM 表名 WHERE NOT id=1;
+SELECT * FROM 表名 WHERE id NOT IN(1,2);
+SELECT * FROM 表名 WHERE id NOT BETWEEN 1 AND 5;
+
+# 如何查询NULL
 SELECT * FROM 表名 WHERE 字段 IS NULL;
--- 查询为 空的数据
-SELECT * FROM 表名 WHERE 字段 =''
 ```
 
-#### 聚合函数---HAVING---GROUNP BY--ORDER BY
+模糊查询：
 
-![image-20240730144405740](C:\Users\79042\AppData\Roaming\Typora\typora-user-images\image-20240730144405740.png)
+```mysql
+-- 模糊查询
+# WHERE--LIKE通配符查询，速度慢，自行了解；
+# '%'可以匹配任意个字符 '_'只匹配单个字符
+SELECT * FROM 表名 WHERE Name = '%F'; # 以F为末尾的值
+SELECT * FROm 表名 WHERE Name ='%Y%'; #有Y的值
+```
 
-![image-20240730144420601](C:\Users\79042\AppData\Roaming\Typora\typora-user-images\image-20240730144420601.png)
+![image-20240802170122465](./assets/image-20240802170122465.png)
 
-- 聚合函数 返回值，可以作为新字段
-- `GROUP BY 字段` 以...分组
-- `HAVING  condition` 表格只需要满足condition的栏目
-- `ORDER BY 字段` 根据...排序，默认升序
-- `LIMIT （值1，）值2`  值1 偏移量（默认为0）， 值2 限制在距离偏移量前多少名
+```mysql
+-- 模糊查询
+# WHERE--REGEXP正则表达式，查询语句
+# '^a'以a开始 's$'以s终止 'a|b'a或者b '[abc]'abc其中的一个 '[a-z]'a-z任意字符 '.'匹配任意字符 '+'1到多个字符 '*'0到多个字符
+SELECT * FROM 表名 WHERE 字段 REGEXP '^a.*s$';#匹配以a开头、以s结尾，任意长度的字符串
+SELECT * FROM 表名 WHERE 字段 REGEXP '^J[AO]N';#匹配JON或者JAN
 
-`LIMIT 3,3  偏移量，查询数` 
+# 字符'.'需要通过'\\.'表示
 
-#### UNION 
+#NOT
+SELECT * FROM 表名 WHERE 字段 NOT 'qq\\.com$'；#匹配不以qq.com 结尾
+```
 
-将 查询到的 数据，合并在一起---**会去除重复的数据**
 
-![image-20240730144720934](C:\Users\79042\AppData\Roaming\Typora\typora-user-images\image-20240730144720934.png)
 
-`UNION ALL` **不去除重复的数据**
+### 创建查询表
 
-#### DISTINCT
+我们查询的数据，默认根据：所查字段的顺序，**构成新的表（只是表的形式呈现，而非真表）**。
 
-将 查询到 重复的数据，删去
+**在MySQL57及之前：查询的数据以数据块的形式存储，方便二次查询，称为查询缓存；默认禁止，很少用。**
 
-![image-20240730144826063](C:\Users\79042\AppData\Roaming\Typora\typora-user-images\image-20240730144826063.png)
+**在MySQL80：查询缓存,已经完全移除。**
+
+
+
+如何根据查询，将其创建成新的表：
+
+```mysql
+CREATE TABLE 表名 SELECT ...
+```
+
+只需:创建表命令+查询语句
+
+
+
+### 分组与排序
+
+**我们查询得到的表，以默认顺序排列，如何根据:字段及其值进行分组和排序？**
+
+#### 假分组：
+
+```mysql
+-- 分组 GROUP BY
+SELECT id,age FROM 表名 WHERE id BETWEEN 1 AND 5 GROUP BY id,age;
+#你会发现，查询的数据：GROUP BY id,age，难道分组命令 无用?
+#原因在于：分组命令，并不是单独使用的，1）需要结合：聚合函数，来使用；2)需要表关系：一对多
+```
+
+#### 聚合函数--HAING：
+
+##### ![image-20240730144405740](./assets/image-20240730144405740.png)
+
+**尽管分组中需要使用聚合函数，但聚合函数，不是只为分组服务**
+
+```mysql
+# 聚合函数的使用
+SELECT MIN(Age) AS min_age FROM user;#查找Age的最小值，并将其作为min_age字段
+#HAVING 与 SELECT 区别：
+#SELECT只能过渡原生数据，HAVING过渡聚合函数的数据
+SELECT MIN(Age) AS min_age FROM user HAVING min_age>18;
+```
+
+#### **真分组**
+
+#### **--分组命令的要求：**
+
+```mysql
+# 上一句的命令，字段可以用'*'代替吗？
+SELECT * FROM 表名 GROUP BY id；# 这行命令只需失败，原因见下
+```
+
+MySQL57及以后的版本，默认启用了 `ONLY_FULL_GROUP_BY` 模式：`GROUP BY` 查询中，所有出现在 `SELECT` 列表中的列必须要么出现在 `GROUP BY` 子句中，要么被聚合函数（如 `SUM`、`COUNT`、`AVG` 等）包裹。
+
+这种模式也限定了，分组意义：
+
+**分组意义：**（在一对一关系：不用分组，直接用聚合函数即可）
+
+在一对多关系，**对子表中：同父表ID的结果集，聚合函数进行查询，HAVING过渡**（分组，从概念上，就是为一对多关系服务）
+
+Age不分组，所有Age值为一个结果集。
+
+Age分组，不同Age值分别为一个结果集
+
+```mysql
+-- 一对一为什么不用分组？
+SELECT MAX(Age)AS max_age,MIN(Age) AS min_age,COUNT(Age) AS count_age  FROM user HAVING min_age>0;
+SELECT MAX(Age)AS max_age,MIN(Age) AS min_age,COUNT(Age) AS count_age  FROM user GROUP BY Age HAVING min_age>0;
+# 根据Age字段分组，相同年龄的会被分为一组作为结果集，但由于分组模式，聚合函数无作用
+# 同理：在一对一关系下，直接使用聚合函数的需求，无需分组
+
+-- 如何在一对多关系，使用？
+-- SELECT 外键id，聚合函数 AS 字段名 GROUP BY 外键 HAVING 聚合函数约束 : 实现 真分组
+SELECT cust_id, COUNT(*) AS orders FROM orders GROUP BY cust_id HAVING COUNT(*) >= 2;
+```
+
+#### ALL&DISTINCT
+
+结果集的数据，重复的数据，有时根据查询需求，只考虑不同的？
+
+```mysql
+-- 计算结果集中重复的结果，默认为所有数据 ALL
+SELECT COUNT(ALL Age) AS age_count FROM user;
+-- 去重，结果只考虑不同的数量 DISTINCT
+SELECT COUNT(DISTINCT) AS diff_age_count FROM user;
+```
 
 ### 子查询
 
-![image-20240730150104544](C:\Users\79042\AppData\Roaming\Typora\typora-user-images\image-20240730150104544.png)
+**嵌套在一个查询中的查询语句，被称为子查询。**先执行子查询语句，再执行本查询。
 
-`SELECT __ FROM 表名 AS 别名` **给查找__，返回的表 起别名**
+子查询在执行后，与字段值没有区别。
 
-**可以是 特定字段，聚合函数，子查询的表**
+```mysql
+-- 在员工表，查询公司员工数目> 2的员工有哪些
+SELECT com_id,Name FROM user WHERE com_id IN (SELECT COUNT(com_id) AS number FROM user GROUP BY com_id HAVING number>2 );
+# 子查询需要分组，为了得到不同公司的员工数，否则得到所有公司总数
+# 上例：是在一对多关系中，我们需要在子查询中分组
 
-`SELECT/INSERT INTO/CREATE TABLE`的表名是一个`SELECT`语句，称为子查询
+# 在一对一关系下，无需分组
+-- 查找表中Age大于最小年龄的Name与Age
+SELECT Name,Age FROM user WHERE Age > (SELECT MIN(Age) AS min_age FROM user);
+```
+
+**子查询在一对一需求可以使用；在一对多关系时，一般用：表连接，效率更高，代码可读性强**
 
 
 
