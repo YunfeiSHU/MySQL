@@ -20,6 +20,23 @@ mysql -u root -p #简写
 
 - `-u root`：指定用 `root` 这个用户名来连接数据库。
 
+```mysql
+-- 开发环境用root用户
+-- 生产环境，需要创建多个用户（可以在后续在学，现在知道即可）
+# 创建用户
+CREATE USER 'username'@'localhost' IDENTIFIED BY 'password';
+# 指定权限
+GRANT ALL PRIVILEGES ON database_name.* TO 'username'@'localhost'; #整个数据库的权限
+GRANT SELECT ON database_name.table_name TO 'username'@'localhost';#表结构权限
+GRANT SELECT, INSERT, UPDATE, DELETE ON database_name.* TO 'username'@'localhost';#数据的CRUD权限
+# 撤销权限
+REVOKE ALL PRIVILEGES ON database_name.* FROM 'username'@'localhost';
+# 刷新权限
+FLUSH PRIVILEGES;
+# 删除用户
+DROP USER 'username'@'localhost';
+```
+
 - `-h localhost`：指定连接的主机名为 `localhost`，也就是本地服务器。
 
 - `-P 3306`：指定使用的端口号为 `3306`，这是 MySQL 的默认端口号。 **大写**
