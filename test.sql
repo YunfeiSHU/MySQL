@@ -51,4 +51,42 @@ DELETE FROM  user WHERE ID=3;
 -- 分组
 SELECT `ID`,`Age` FROM user WHERE `ID` BETWEEN 1 AND 2 GROUP BY `Age`,`ID`;
 SELECT MIN(Age) AS min_age FROM user  ;
-SELECT MAX(Age) AS max_age FROM user HAVING max_age>18;
+SELECT MAX(Age)AS max_age,MIN(Age) AS min_age,COUNT(Age) AS count_age  FROM user HAVING min_age>0;
+SELECT MAX(Age)AS max_age,MIN(Age) AS min_age,COUNT(Age) AS count_age  FROM user GROUP BY Age HAVING min_age>0;
+
+-- 子查询
+# 查找user表在user_details表有数据的ID Name Age
+SELECT * FROM `user` WHERE ID IN (SELECT user_ID FROM user_details GROUP BY `user_ID` ) ;
+# 查找user表中Age > AVG 的 信息
+SELECT ID,Name,Age  FROM user WHERE Age > (SELECT AVG(Age) FROM user) 
+
+-- 组合查询UNION
+# 伪实现，查找user表在user_details表有数据的所有数据
+# 伪实现；UNOIN的俩个查询是独立的，不能表名.字段
+SELECT * FROM `user` WHERE ID IN (SELECT user_ID FROM user_details GROUP BY `user_ID` )  
+UNION
+SELECT user_ID ,Gender ,Hobbies  FROM user_details WHERE user_ID IN (SELECT ID FROM user GROUP BY ID); #发现user_ID,Gender,Hobbies 被竖向合并，而非横向扩展
+
+-- 表连接
+# 真实现：利用表连接，轻松实现查询所有数据
+# WHERE,HAVING 都只能对单个表，进行条件约束
+# ON 限制条件: ON 之后的限制条件，可以是多个表字段 
+# INNER JOIN ... ON ... : 返回两表中满足ON约束的数据
+SELECT  user.`ID`,user.`Name`,user.`Age`,user_details.`Gender`,user_details.`Hobbies` FROM user INNER JOIN user_details on user.`ID` = user_details.`user_ID`;
+# LEFT JOIN ... ON ... : 返回左表中所有数据，右表中满足要求的数据
+SELECT  user.`ID`,user.`Name`,user.`Age`,user_details.`Gender`,user_details.`Hobbies` FROM user LEFT JOIN user_details on user.`ID` = user_details.`user_ID`;
+# RIGHT JOIN ... ON ... : 返回右表所有数据，左表满足要求的数据
+SELECT  user.`ID`,user.`Name`,user.`Age`,user_details.`Gender`,user_details.`Hobbies` FROM user RIGHT JOIN user_details on user.`ID` = user_details.`user_ID`;
+
+-- 排序
+SELECT * FROM user ORDER BY age ASC;
+SELECT * FROM user ORDER BY age DESC;
+
+-- 限定前几个数据
+# 升序LIMIT 1: min
+SELECT * FROM user ORDER BY age Limit 1;
+# 降序LIMIT1： max
+SELECT * FROM user ORDER BY age DESC Limit 1;
+
+# 综合使用连接，分组与排序
+SELECT * FROM user INNER JOIN user_details ON user.`ID`=user_details.`user_ID` GROUP BY user.ID  ORDER BY Age LIMIT 2;

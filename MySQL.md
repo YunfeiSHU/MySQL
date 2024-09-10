@@ -493,6 +493,8 @@ CREATE TABLE 表名 SELECT ...
 
 
 
+
+
 ### 分组与排序
 
 **我们查询得到的表，以默认顺序排列，如何根据:字段及其值进行分组和排序？**
@@ -533,20 +535,22 @@ MySQL57及以后的版本，默认启用了 `ONLY_FULL_GROUP_BY` 模式：`GROUP
 
 这种模式也限定了，分组意义：
 
-**分组意义：**（在一对一关系：不用分组，直接用聚合函数即可）
-
-在一对多关系，**对子表中：同父表ID的结果集，聚合函数进行查询，HAVING过渡**（分组，从概念上，就是为一对多关系服务）
+**分组意义：本质是字典[id]:age-->集合[age]:bool的转变**
 
 Age不分组，所有Age值为一个结果集。
 
-Age分组，不同Age值分别为一个结果集
+Age分组，不同Age值分别为一个结果集。
+
+**是否分组：**
+
+分组的选择：**根据实际需求选择。所要的结果，是基于所有值，还是单个值**。
 
 ```mysql
--- 一对一为什么不用分组？
+-- 非外键字段，一般不分组
 SELECT MAX(Age)AS max_age,MIN(Age) AS min_age,COUNT(Age) AS count_age  FROM user HAVING min_age>0;
 SELECT MAX(Age)AS max_age,MIN(Age) AS min_age,COUNT(Age) AS count_age  FROM user GROUP BY Age HAVING min_age>0;
-# 根据Age字段分组，相同年龄的会被分为一组作为结果集，但由于分组模式，聚合函数无作用
-# 同理：在一对一关系下，直接使用聚合函数的需求，无需分组
+# 根据Age字段分组，Age不同结果分别作为结果集，会记录同一个年龄的count，和相同Age的max，min
+# 当然也用例外：一对一，子查询
 
 -- 如何在一对多关系，使用？
 -- SELECT 外键id，聚合函数 AS 字段名 GROUP BY 外键 HAVING 聚合函数约束 : 实现 真分组
@@ -561,212 +565,164 @@ SELECT cust_id, COUNT(*) AS orders FROM orders GROUP BY cust_id HAVING COUNT(*) 
 -- 计算结果集中重复的结果，默认为所有数据 ALL
 SELECT COUNT(ALL Age) AS age_count FROM user;
 -- 去重，结果只考虑不同的数量 DISTINCT
-SELECT COUNT(DISTINCT) AS diff_age_count FROM user;
+SELECT COUNT(DISTINCT Age) AS diff_age_count FROM user;
 ```
 
-### 子查询
+#### 子查询
 
-**嵌套在一个查询中的查询语句，被称为子查询。**先执行子查询语句，再执行本查询。
+有时候，我们作为字段值的，可能是查询的结果；此时我们需要子查询。
 
-子查询在执行后，与字段值没有区别。
+**定义：嵌套在一个查询中的查询语句，被称为子查询。**先执行子查询语句，再执行本查询。
+
+子查询在执行后，作为字段值使用。
 
 ```mysql
--- 在员工表，查询公司员工数目> 2的员工有哪些
+# 子查询为同一个表
+-- 在员工表：查询公司员工数目> 2的员工有哪些
 SELECT com_id,Name FROM user WHERE com_id IN (SELECT COUNT(com_id) AS number FROM user GROUP BY com_id HAVING number>2 );
-# 子查询需要分组，为了得到不同公司的员工数，否则得到所有公司总数
-# 上例：是在一对多关系中，我们需要在子查询中分组
-
-# 在一对一关系下，无需分组
--- 查找表中Age大于最小年龄的Name与Age
+-- 在user表：查找表中Age大于最小年龄的Name与Age
 SELECT Name,Age FROM user WHERE Age > (SELECT MIN(Age) AS min_age FROM user);
+
+# 子查询为外键对应的表：仅参考，一般不这么干
+-- 查找user表：user.ID=user_details.ID 的 ID和Name
+SELECT ID,Name FROM `user` WHERE `ID` IN (SELECT user_ID FROM user_details GROUP BY `user_ID` ) 
 ```
 
-**子查询在一对一需求可以使用；在一对多关系时，一般用：表连接，效率更高，代码可读性强**
+**当子查询的字段是：外键约束的字段，一般用表连接，替代子查询。**
+
+#### 表连接
+
+在多个表查询时，我们需要使用外键约束，来实现表连接。
+
+**表连接，分为横向扩展：连接，纵向合并：UNION**
 
 
 
-## 表连接
-
-当俩个表时，我们会用父表的主键，赋值给子表的外键；
-
-如何将这俩个表连接在一起。
-
-### 内连接 (INNER JOIN)
-
-内连接会返回两个表中满足连接条件的所有记录。
-
-**语法：**
+##### 组合查询UNION
 
 ```mysql
-SELECT columns
-FROM table1
-INNER JOIN table2
-ON table1.column = table2.column;
+# 查找user表在user_details表有数据的ID Name Age
+SELECT * FROM `user` WHERE ID IN (SELECT user_ID FROM user_details GROUP BY `user_ID` ) ;
+
+-- 组合查询UNION：纵向合并
+# 伪实现，查找user表在user_details表有数据的所有数据
+SELECT * FROM `user` WHERE ID IN (SELECT user_ID FROM user_details GROUP BY `user_ID` ) UNION
+SELECT user_ID ,Gender ,Hobbies  FROM user_details WHERE user_ID IN (SELECT ID FROM user GROUP BY ID); #发现user_ID,Gender,Hobbies 被竖向合并，而非横向
+
 ```
 
-**示例：**
+UNION实现：
 
-假设有两个表 `employees` 和 `departments`，分别包含以下数据：
+![image-20240909230140729](./assets/image-20240909230140729.png)
 
-`employees` 表：
+##### 连接 JOIN ON
 
-| id   | name | department_id |
-| ---- | ---- | ------------- |
-| 1    | John | 1             |
-| 2    | Jane | 2             |
-| 3    | Jack | 3             |
-
-`departments` 表：
-
-| id   | department_name |
-| ---- | --------------- |
-| 1    | HR              |
-| 2    | IT              |
-
-查询每个员工及其所属部门的名称：
+表连接，可以有效解决子查询不是本表时：效率慢，可读性差 的问题。
 
 ```mysql
-SELECT employees.name, departments.department_name
-FROM employees
-INNER JOIN departments
-ON employees.department_id = departments.id;
+-- 表连接
+# 真实现：利用表连接，轻松实现查询所有数据
+# WHERE,HAVING 都只能对单个表，进行条件约束
+# ON 限制条件: ON 之后的限制条件，可以是多个表字段 
+# INNER JOIN ... ON ... : 返回两表中满足ON约束的数据
+SELECT  user.`ID`,user.`Name`,user.`Age`,user_details.`Gender`,user_details.`Hobbies` FROM user INNER JOIN user_details on user.`ID` = user_details.`user_ID`;
+# LEFT JOIN ... ON ... : 返回左表中所有数据，右表中满足要求的数据
+SELECT  user.`ID`,user.`Name`,user.`Age`,user_details.`Gender`,user_details.`Hobbies` FROM user LEFT JOIN user_details on user.`ID` = user_details.`user_ID`;
+# RIGHT JOIN ... ON ... : 返回右表所有数据，左表满足要求的数据
+SELECT  user.`ID`,user.`Name`,user.`Age`,user_details.`Gender`,user_details.`Hobbies` FROM user RIGHT JOIN user_details on user.`ID` = user_details.`user_ID`;
 ```
 
-结果：
+#### 排序
 
-| name | department_name |
-| ---- | --------------- |
-| John | HR              |
-| Jane | IT              |
+默认排序，并非我们所要的。
 
-左连接---
+如何根据指定字段，进行排序？
 
-### 左连接 (LEFT JOIN)
-
-左连接会返回左表中的所有记录，以及右表中满足连接条件的记录。如果右表中没有匹配的记录，则返回 `NULL`。
-
-**语法：**
+在排序后，我们有时无需整表数据，只需要第一个或前几个的数据，怎么实现？
 
 ```mysql
-SELECT columns
-FROM table1
-LEFT JOIN table2
-ON table1.column = table2.column;
+-- ORDER BY 指定字段 ASC升序/DESC 降序 
+SELECT * FROM user ORDER BY age ASC;
+SELECT * FROM user ORDER BY age DESC;
+
+-- 限定前几个数据
+# 升序LIMIT 1: min
+SELECT * FROM user ORDER BY age Limit 1;
+# 降序LIMIT1： max
+SELECT * FROM user ORDER BY age DESC Limit 1;
+
+-- 连接和排序
+SELECT * FROM user INNER JOIN user_details ON user.`ID`=user_details.`user_ID` ORDER BY Age LIMIT 2;
+# 当我们使用连接时，连接后的表，我们才能 WHERE--GROUP BY--HAVING--ORDER BY 
+
+# 综合使用：连接，分组与排序
+SELECT user.`ID`,user.`Name`,user.`Age`, AVG(user.`Age`) AS avg_age ,user_details.`Gender`,user_details.`Hobbies` FROM user 
+INNER JOIN user_details ON user.`ID`=user_details.`user_ID`
+WHERE `Name`='SYF'# 连接后的新表，字段值同select中字段
+GROUP BY user.ID #通过user.ID 分组，而ID是主键，则每个数据项都是一个组
+ORDER BY Age ; 
 ```
 
-**示例：**
+查询语句的顺序：
+
+JOIN table2 ON ... => WHERE =>GROUP BY => HAVING => ORDER BY =>LIMIT
+
+
+
+## 索引 TODO
+
+MySQL作为关系型数据库，查询数据，在单个表和多个之间。
+
+当数据量大时，默认的查询顺序效率慢。
+
+对于查询常用字段，我们可以设置索引，来加快查询速率。
+
+我们常用的索引：
+
+- 一般索引
+- 唯一索引
+- 主键索引
+- 组合索引
+- 全文索引
+- 空间索引
+-  BTREE 和 HASH 索引
 
 ```mysql
-SELECT employees.name, departments.department_name
-FROM employees
-LEFT JOIN departments
-ON employees.department_id = departments.id;
-```
+-- 一般索引
+CREATE INDEX 索引名 ON 表名(指定字段);
 
-结果：
+-- 唯一索引:要求指定字段，值唯一
+CREATE UNIQUE INDEX 索引名 ON 表名(指定字段);
+# 我们对字段进行UNIQUE唯一约束时，MySQL字段帮我们创建唯一索引
 
-| name | department_name |
-| ---- | --------------- |
-| John | HR              |
-| Jane | IT              |
-| Jack | NULL            |
+-- 主键索引：MySQL 主键 由 UNIQUE INDEX + NOT NULL 创建
+# 即设置主键约束，省略
 
-### 右连接 (RIGHT JOIN)
+-- 组合索引：一个索引，指定多个字段；用于多列搜索
+CREATE INDEX idx_name_age ON users (name, age);
 
-右连接会返回右表中的所有记录，以及左表中满足连接条件的记录。如果左表中没有匹配的记录，则返回 `NULL`。
-
-**语法：**
-
-```mysql
-SELECT columns
-FROM table1
-RIGHT JOIN table2
-ON table1.column = table2.column;
-```
-
-**示例：**
-
-```mysql
-SELECT employees.name, departments.department_name
-FROM employees
-RIGHT JOIN departments
-ON employees.department_id = departments.id;
-```
-
-结果：
-
-| name | department_name |
-| ---- | --------------- |
-| John | HR              |
-| Jane | IT              |
-| NULL | Marketing       |
-
-### 语句格式
-
-```mysql
----JOIN ON
--- 2查询新表格的指定字段
-SELECT 字段
--- 1建立新表格
-FROM 表1
-___ JOIN  表2 
-ON 表1.外键=表2.主键
-
-方法2
---SELECT+WHERE 实现表连接
-SELECT * FROM 表1(别名),表2(别名)
-WHERE 表1.主键 = 表2.外键
-```
-
-
-
-
-
-## 索引
-
-索引不一定提供约束，使用的目的是为了提高查找效率
-
-### 案例
-
-![image-20240730172420199](C:\Users\79042\AppData\Roaming\Typora\typora-user-images\image-20240730172420199.png)
-
-### 具体格式
-
-- 创建索引
-
-```mysql
--- 创建普通索引
-CREATE INDEX 索引名 ON 表名(字段名)
-
-可以在创建表时，就创建 UNIQUE 和 PRIMARY KEY 约束
--- 创建唯一索引
-CREATE UNIQUE INDEX idx_unique_column ON table_name(column_name);
--- 创建主键索引
-ALTER TABLE table_name ADD PRIMARY KEY (column_name);
-```
-
-- 删除索引
-
-```mysql
--- 删除普通和唯一索引
-DROP INDEX index_name ON table_name;
--- 删除主键索引
-ALTER TABLE table_name DROP PRIMARY KEY;
+# 以下还没怎么用过，待之后补充
+- 全文索引
+- 空间索引
+- BTREE 和 HASH 索引
 ```
 
 
 
 ## 视图
 
-视图是虚拟存在的表，会随着SELECT 语句返回的表 变化而变化
+**视图（View）** 是 MySQL 中的一种虚拟表，它基于查询的结果集定义，**不存储实际数据，而是通过查询动态生成数据**。视图的作用是简化复杂查询、控制数据访问权限，以及提供数据的不同视角。可以把**视图看作是一个存储在数据库中的 SQL 查询**，它本质上是一个查询的“窗口”。
 
 ```mysql
--- 创建视图 CREATE VIEW - AS select语句
-CREATE VIEW 视图名
-AS
-SELECT * FROM 表名 WHERE 指定字段 ;
-
--- 删除视图
-DROP VIEW 视图名 ;
+-- 创建
+CREATE VIEW 视图名 AS SELECT ... 
+# 将SELECT查询，存储到视图
+-- 查询
+SELECT * FROM 视图名;
+-- 修改：即修改SQL语句
+ALTER VIEW ... AS
+SELECT ...;
+-- 删除
+DROP VIEW ...;
 ```
 
